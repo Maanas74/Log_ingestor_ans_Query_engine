@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Search</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Query Your Logs</h1>
+
+    <form id="logFilterForm">
+        <label for="level">Level:</label>
+        <input type="text" id="level" name="level"><br>
+
+        <label for="message">Message:</label>
+        <input type="text" id="message" name="message"><br>
+
+        <label for="resourceId">Resource ID:</label>
+        <input type="text" id="resourceId" name="resourceId"><br>
+
+        <label for="timestamp">Timestamp:</label>
+        <input type="text" id="timestamp" name="timestamp"><br>
+
+        <label for="traceId">Trace ID:</label>
+        <input type="text" id="traceId" name="traceId"><br>
+
+        <label for="spanId">Span ID:</label>
+        <input type="text" id="spanId" name="spanId"><br>
+
+        <label for="commit">Commit:</label>
+        <input type="text" id="commit" name="commit"><br>
+
+        <label for="parentResourceId">Parent Resource ID:</label>
+        <input type="text" id="parentResourceId" name="parentResourceId"><br>
+
+        <button type="button" onclick="searchLogsWrapper()">Search</button>
+        <button type="button" id="prevbutton" onclick="searchLogsPrevious()" disabled>PREV</button>
+        <button type="button" id="nextbutton" onclick="searchLogsNext()" disabled>Next</button>
+    </form>
+
+    <div id="searchResults">
+        <!-- Display search results here -->
+    </div>
+
+    <script>
+        sessionStorage.setItem('filter', {})
+        sessionStorage.setItem('count', 0)
+        
+        function searchLogsPrevious(){
+            searchLogs(-10);
+        }
+
+        function searchLogsNext(){
+            searchLogs(10);
+        }
+
+        async function searchLogsWrapper(){
+            sessionStorage.setItem('count', 0);
+            document.getElementById("prevbutton").disabled=true;
+            document.getElementById("nextbutton").disabled=true;
+            await searchLogs(10);
+        }
+
+        async function searchLogs(nextcount=10) {
+            
+            const filters = {
+                level: document.getElementById("level").value,
+                message: document.getElementById("message").value,
+                resourceid: document.getElementById("resourceId").value,
+                timestamp: document.getElementById("timestamp").value,
+                traceid: document.getElementById("traceId").value,
+                spanid: document.getElementById("spanId").value,
+                commit: document.getElementById("commit").value,
+                parentResourceId: document.getElementById("parentResourceId").value,
+            };
+            const count=parseInt(sessionStorage.getItem('count'))
+
+            if(sessionStorage.getItem('filter')!=filters){
+                sessionStorage.setItem('count', 0)
+                curr_filter=filters
+                document.getElementById("prevbutton").disabled=true;
+                document.getElementById("nextbutton").disabled=true;
+            }
+
+            // Remove empty values from filters
+            Object.keys(filters).forEach(key => filters[key] === "" && delete filters[key]);
+
+            const response = await fetch('http://localhost:3000/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ filters,count }),
+            });
+
+            const result = await response.json();
+
+            const searchResultsDiv = document.getElementById("searchResults");
+            searchResultsDiv.innerHTML = "";  // Clear previous results
+
+            if (result.length === 0) {
+                document.getElementById("nextbutton").disabled=true;
+                searchResultsDiv.innerHTML = "<p>No results found</p>";
+                return;
+            }
+
+            sessionStorage.setItem('count', count+parseInt(nextcount));
+
+            // Create a table
+            const table = document.createElement("table");
+
+            // Create header row
+            const headerRow = table.insertRow(0);
+            Object.keys(result[0]).forEach(key => {
+                const th = document.createElement("th");
+                if (key === 'metadata') {
+                    th.textContent = 'parentresourceid';
+                } else {
+                    th.textContent = key;
+                }
+                headerRow.appendChild(th);
+            });
+
+            // Create data rows
+            result.forEach(log => {
+                const row = table.insertRow();
+                Object.values(log).forEach(value => {
+                    const cell = row.insertCell();
+                    if (typeof value === 'object' && 'parentResourceId' in value) {
+                        cell.textContent = value.parentResourceId;
+                    } else {
+                        cell.textContent = value;
+                    }
+                });
+            });
+
+            // Append the table to the searchResultsDiv
+            searchResultsDiv.appendChild(table);
+            if(count==10)
+                document.getElementById("prevbutton").disabled=false;
+            document.getElementById("nextbutton").disabled=false;
+        }
+        searchLogs()
+    </script>
+
+</body>
+</html>
